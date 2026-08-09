@@ -2,17 +2,21 @@
 
 ## Scenario and problem
 
-This project addresses the second-hand electronics market scenario. The underlying problem is not just inconsistent inspection: the business lacks a traceable decision trail from intake through purchase, repair, availability, and sale. That makes pricing hard to explain and allows risky devices to enter stock.
+This project addresses the second-hand electronics market scenario. The business's costliest failure mode is a bad purchase decision — buying a risky or misrepresented device from a seller who is then gone, which the owner says can erase the profit from several good sales. The root cause is inconsistent, undocumented inspection: every employee checks differently, so purchase decisions can't be justified or audited afterward.
+
+This MVP addresses the purchase-decision side of that problem: a standardized inspection produces a deterministic condition score, risk score, and purchase-price ceiling, so a bad buy is caught before money changes hands, with a traceable record from intake through purchase, repair, and sale. Explaining what the business charges a *customer* for a listed device is a related but separate problem — the condition grade and inspection evidence captured here could support that conversation, but this MVP does not build a sale/listing-price calculator (see "With five more hours").
 
 The primary users are intake employees and managers; the lightweight repair queue supports technicians after a device is purchased.
 
 ## What the MVP does
 
 ```text
-New inspection → score, risk, and price → BUY / REVIEW / REJECT
-REVIEW → Inspection History → approve purchase or reject
+Inspection History (home) → New Inspection → score, risk, and price → BUY / REVIEW / REJECT
+REVIEW → back to Inspection History → approve purchase or reject
 BUY → Inventory → Repair required → Under repair → Available → Sold
 ```
+
+Inspection History is the landing page. A standalone dashboard was considered and dropped: the owner's stated problems (inconsistent inspection, unexplainable pricing, losses on bad purchases) are about decision quality, not needing an aggregate status view, and a card-based summary would have just duplicated what History already shows with search and filters.
 
 - Standardized device, physical, functional, battery, repair-history, and identification checks.
 - Deterministic condition score, risk level, price ceiling, expected profit, and margin.
@@ -44,4 +48,7 @@ npm run dev
 
 ## With five more hours
 
-I would add lightweight role-oriented workspaces—not full authentication or permission management. An inspector would see intake and their incomplete inspections; a manager would see the pending-review/approval queue; and a technician would see only the Repair Queue.
+In priority order:
+
+1. **Role-oriented pages, not full authentication.** Split Inspector (intake + their in-progress inspections), Manager (pending-review/approval queue), and Technician (Repair Queue only) into separate routes with a lightweight role switcher — no login, no permission system. This matches "employees have different levels of technical knowledge" and keeps each screen scoped to the one decision that role makes, instead of every user seeing every page.
+2. **A QA/re-inspection step before a repaired device returns to Available**, closing the loop on "some faults appear only after extended use" — right now completing a repair flips status directly with no re-verification.

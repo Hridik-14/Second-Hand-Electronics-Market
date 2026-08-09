@@ -11,7 +11,6 @@ import {
 import {
   ArrowLeft,
   ClipboardCheck,
-  LayoutDashboard,
   Package,
   Plus,
   Search,
@@ -81,9 +80,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="space-y-1">
           {[
-            ["/", "Dashboard", LayoutDashboard],
+            ["/", "Inspection History", ClipboardCheck],
             ["/inspection/new", "New Inspection", Plus],
-            ["/inspections", "Inspection History", ClipboardCheck],
             ["/inventory", "Inventory", Package],
             ["/repairs", "Repair Queue", Wrench],
           ].map(([to, label, Icon]: any) => (
@@ -107,51 +105,6 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Dashboard({ devices }: { devices: any[] }) {
-  const recent = devices.slice(0, 5);
-  return (
-    <Page
-      title="Dashboard"
-      action={
-        <Link className="btn" to="/inspection/new">
-          <Plus size={17} /> New Inspection
-        </Link>
-      }
-    >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          ["Today’s Inspections", 12, "text-blue-600"],
-          [
-            "Pending Review",
-            devices.filter((d) => d.decision === "REVIEW").length,
-            "text-amber-600",
-          ],
-          [
-            "Available",
-            devices.filter((d) => d.status === "Available" || d.status === "Ready").length,
-            "text-emerald-600",
-          ],
-          [
-            "Needs Repair",
-            devices.filter((d) => d.status === "Repair required" || d.status === "Repair").length,
-            "text-red-600",
-          ],
-        ].map(([l, n, c]: any) => (
-          <div className="card" key={l}>
-            <p className="text-sm text-slate-500">{l}</p>
-            <p className={`mt-2 text-3xl font-bold ${c}`}>{n}</p>
-          </div>
-        ))}
-      </div>
-      <section className="card mt-6 overflow-hidden p-0">
-        <div className="border-b p-5">
-          <h2 className="font-semibold">Recent devices</h2>
-        </div>
-        <DeviceTable devices={recent} />
-      </section>
-    </Page>
-  );
-}
 function DeviceTable({ devices }: { devices: any[] }) {
   return (
     <div className="overflow-x-auto">
@@ -306,7 +259,7 @@ function Inspection({ onSave, devices }: { onSave: (d: any) => void; devices: an
       createdAt: new Date().toISOString(),
     };
     onSave(record);
-    nav(finalDecision === "BUY" ? "/inventory" : "/inspections");
+    nav(finalDecision === "BUY" ? "/inventory" : "/");
   };
   return (
     <Page
@@ -470,7 +423,7 @@ function DeviceForm({ d, set, errors, rejectedDuplicate, onAcknowledgeRejectedDu
           />
         </label>
         {field("Seller name", "seller.name")}
-        {field("Seller phone", "seller.phone")}
+        {field("Seller phone number", "seller.phone", "number")}
       </div>
       <div className="mt-5 rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">
         Optional photo preview only — no upload processing in this MVP.
@@ -747,7 +700,15 @@ function InspectionHistory({ devices }: { devices: any[] }) {
         .includes(q.toLowerCase()),
   );
   return (
-    <Page title="Inspection History" subtitle="All incoming-device assessments, including reviews and rejections">
+    <Page
+      title="Inspection History"
+      subtitle="All incoming-device assessments, including reviews and rejections"
+      action={
+        <Link className="btn" to="/inspection/new">
+          <Plus size={17} /> New Inspection
+        </Link>
+      }
+    >
       <div className="mb-5 flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1 gap-2">
           <Search className="absolute left-3 top-3 text-slate-400" size={18} />
@@ -972,9 +933,8 @@ function App() {
     <BrowserRouter>
       <Shell>
         <Routes>
-          <Route path="/" element={<Dashboard devices={devices} />} />
+          <Route path="/" element={<InspectionHistory devices={devices} />} />
           <Route path="/inspection/new" element={<Inspection onSave={add} devices={devices} />} />
-          <Route path="/inspections" element={<InspectionHistory devices={devices} />} />
           <Route path="/inventory" element={<Inventory devices={devices} />} />
           <Route path="/repairs" element={<RepairQueue devices={devices} onUpdate={update} />} />
           <Route path="/device/:id" element={<Detail devices={devices} onUpdate={update} />} />
