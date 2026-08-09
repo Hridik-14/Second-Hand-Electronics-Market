@@ -1,37 +1,39 @@
 # DeviceInspector — Second-Hand Electronics MVP
 
-## Scenario and problem
+**Scenario:** The Second-Hand Electronics Market.
 
-This project addresses the second-hand electronics market scenario. The business's costliest failure mode is a bad purchase decision — buying a risky or misrepresented device from a seller who is then gone, which the owner says can erase the profit from several good sales. The root cause is inconsistent, undocumented inspection: every employee checks differently, so purchase decisions can't be justified or audited afterward.
+## Problem and primary user
 
-This MVP addresses the purchase-decision side of that problem: a standardized inspection produces a deterministic condition score, risk score, and purchase-price ceiling, so a bad buy is caught before money changes hands, with a traceable record from intake through purchase, repair, and sale. Explaining what the business charges a *customer* for a listed device is a related but separate problem — the condition grade and inspection evidence captured here could support that conversation, but this MVP does not build a sale/listing-price calculator (see "With five more hours").
+The business's costliest failure is a bad purchase decision — buying a risky or misrepresented device from a seller who's since gone, which can erase the profit from several good sales. The root cause: every employee inspects differently, so purchase calls can't be justified afterward. This MVP standardizes inspection into a deterministic condition score, risk score, and purchase-price ceiling, so bad buys are caught before money changes hands, with a full record from intake through purchase, repair, and sale.
 
-The primary users are intake employees and managers; the lightweight repair queue supports technicians after a device is purchased.
+Primary users: intake employees and managers; the repair queue also supports technicians once a device is purchased. Explaining what the business charges customers is a related problem this MVP doesn't solve — it only prices what the business pays sellers.
 
-## What the MVP does
+## How it works
 
-```text
-Inspection History (home) → New Inspection → score, risk, and price → BUY / REVIEW / REJECT
-REVIEW → back to Inspection History → approve purchase or reject
-BUY → Inventory → Repair required → Under repair → Available → Sold
+```mermaid
+flowchart LR
+    A[Inspection History\nhome] --> B[New Inspection]
+    B --> C{Score, risk,\npurchase-price ceiling}
+    C -->|REJECT| D[Rejected\nstays in History]
+    C -->|REVIEW| E[Pending Review]
+    E -->|manager approves| F
+    E -->|manager rejects| D
+    C -->|BUY| F[Inventory]
+    F --> G{Needs repair?}
+    G -->|yes| H[Repair required] --> I[Under repair] --> J[Available]
+    G -->|no| J[Available]
+    J --> K[Sold]
 ```
 
-Inspection History is the landing page. A standalone dashboard was considered and dropped: the owner's stated problems (inconsistent inspection, unexplainable pricing, losses on bad purchases) are about decision quality, not needing an aggregate status view, and a card-based summary would have just duplicated what History already shows with search and filters.
+- Standardized physical/functional/battery/repair-history/identification checklist drives a deterministic condition score, risk score, and purchase-price ceiling (`src/lib/evaluation.ts`). Max buy price = adjusted market value − repair cost − risk buffer − desired profit.
+- Duplicate serial/IMEI checks block re-intake of active or pending devices; a rejected-history match needs explicit acknowledgement.
+- A simple warranty summary (coverage/exclusions/duration) is derived from inspection results — guidance only, not claims handling.
+- Repair Queue lets a technician take and complete a repair, returning the device to Available.
+- No standalone dashboard: History already gives search/filters, and the owner's stated problems are about decision quality, not an aggregate status view.
 
-- Standardized device, physical, functional, battery, repair-history, and identification checks.
-- Deterministic condition score, risk level, price ceiling, expected profit, and margin.
-- Seller quote and actual agreed purchase price are compared with the calculated maximum buy price.
-- A simple inspection-based warranty summary states covered parts, exclusions, and duration; it is guidance only, not warranty-claim management.
-- Inspection History retains every assessed device; active Inventory contains accepted purchases only.
-- Repair Queue lets a technician take and complete a repair; the item then becomes Available.
-- Local serial number and IMEI duplicate checks prevent duplicate active inventory/pending-review records. A rejected historical match requires acknowledgement.
-- Mock demo data and browser `localStorage` persistence; no backend or external API.
+## Assumptions and exclusions
 
-## Assumptions and deliberate exclusions
-
-All devices, seller details, prices, and repairs are mock data. The identifier check is a local traceability safeguard, not an ownership, stolen-device, or external IMEI lookup.
-
-To preserve scope, this MVP does not include authentication, technician accounts, real marketplace pricing, cloud photo storage, inventory parts, invoices, warranty claims/returns, notifications, or real repair management.
+All devices, sellers, prices, and repairs are mock data; persisted in browser `localStorage`, no backend. The identifier check is a local traceability safeguard, not a real ownership/stolen-device lookup. To preserve scope: no auth, technician accounts, real marketplace pricing, cloud photo storage, parts/invoices, warranty claims, or notifications.
 
 ## Run locally
 
@@ -40,15 +42,7 @@ npm install
 npm run dev
 ```
 
-## Key logic
-
-`src/lib/evaluation.ts` contains the condition, risk, pricing, and recommendation rules. Maximum buy price is calculated as:
-
-`adjusted market value − repair cost − risk buffer − desired profit`
-
 ## With five more hours
 
-In priority order:
-
-1. **Role-oriented pages, not full authentication.** Split Inspector (intake + their in-progress inspections), Manager (pending-review/approval queue), and Technician (Repair Queue only) into separate routes with a lightweight role switcher — no login, no permission system. This matches "employees have different levels of technical knowledge" and keeps each screen scoped to the one decision that role makes, instead of every user seeing every page.
-2. **A QA/re-inspection step before a repaired device returns to Available**, closing the loop on "some faults appear only after extended use" — right now completing a repair flips status directly with no re-verification.
+1. **Role-oriented pages** (Inspector / Manager / Technician), no auth — matches "employees have different levels of technical knowledge," keeps each screen scoped to one decision.
+2. **QA/re-inspection step** before a repaired device returns to Available, closing the loop on "faults appear only after extended use" — currently repair completion has no re-verification.
