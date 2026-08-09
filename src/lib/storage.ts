@@ -2,97 +2,29 @@ import { calculatePrice } from "./evaluation";
 
 const key = "device-inspection-mvp";
 const seeded = [
-  [
-    "DEV-001",
-    "smartphone",
-    "Apple",
-    "iPhone 13",
-    "128GB",
-    "A",
-    "Low",
-    "BUY",
-    13600,
-    "Ready",
-  ],
-  [
-    "DEV-002",
-    "smartphone",
-    "Samsung",
-    "Galaxy S22",
-    "256GB",
-    "A",
-    "Medium",
-    "REVIEW",
-    15000,
-    "Review",
-  ],
-  [
-    "DEV-003",
-    "tablet",
-    "Apple",
-    "iPad 9th Gen",
-    "64GB",
-    "C",
-    "Low",
-    "BUY",
-    10500,
-    "Repair",
-  ],
-  [
-    "DEV-004",
-    "laptop",
-    "Apple",
-    "MacBook Air M1",
-    "256GB",
-    "A+",
-    "Low",
-    "BUY",
-    42000,
-    "Ready",
-  ],
-  [
-    "DEV-005",
-    "laptop",
-    "Dell",
-    "Inspiron 15",
-    "512GB",
-    "D",
-    "High",
-    "REJECT",
-    0,
-    "Rejected",
-  ],
-];
+  { id: "DEV-001", type: "smartphone", brand: "Apple", model: "iPhone 13", storage: "128GB", conditionGrade: "A", riskLevel: "Low", decision: "BUY", maximumPurchasePrice: 13600, status: "Available" },
+  { id: "DEV-002", type: "smartphone", brand: "Samsung", model: "Galaxy S22", storage: "256GB", conditionGrade: "A", riskLevel: "Medium", decision: "REVIEW", maximumPurchasePrice: 15000, status: "Pending Review" },
+  { id: "DEV-003", type: "tablet", brand: "Apple", model: "iPad 9th Gen", storage: "64GB", conditionGrade: "C", riskLevel: "Low", decision: "BUY", maximumPurchasePrice: 10500, status: "Repair required" },
+  { id: "DEV-004", type: "laptop", brand: "Apple", model: "MacBook Air M1", storage: "256GB", conditionGrade: "A+", riskLevel: "Low", decision: "BUY", maximumPurchasePrice: 42000, status: "Available" },
+  { id: "DEV-005", type: "laptop", brand: "Dell", model: "Inspiron 15", storage: "512GB", conditionGrade: "D", riskLevel: "High", decision: "REJECT", maximumPurchasePrice: 0, status: "Rejected" },
+] as const;
 export function loadDevices(): any[] {
   const stored = localStorage.getItem(key);
   if (stored) return JSON.parse(stored);
-  const devices = seeded.map(
-    ([
-      id,
-      type,
-      brand,
-      model,
-      storage,
-      conditionGrade,
-      riskLevel,
-      decision,
-      maximumPurchasePrice,
-      status,
-    ]) => ({
-      id,
-      type,
-      brand,
-      model,
-      storage,
-      serialNumber: `SN-${id}`,
+  const devices = seeded.map((seed) => ({
+      ...seed,
+      id: seed.id,
+      serialNumber: `SN-${seed.id}`,
       imei:
-        type === "laptop"
+        seed.type === "laptop"
           ? ""
-          : `35${String(id).replace("DEV-00", "")}0000000000`,
+          : `35${String(seed.id).replace("DEV-00", "")}0000000000`,
+      identificationStatus: "verified",
+      actualPurchasePrice: seed.maximumPurchasePrice,
       seller: {
         name: "Demo Seller",
         phone: "9876543210",
-        askingPrice: maximumPurchasePrice,
+        askingPrice: seed.maximumPurchasePrice,
       },
       inspection: {
         physical: { screen: "minor", body: "minor", ports: "good" },
@@ -116,33 +48,28 @@ export function loadDevices(): any[] {
         waterDamage: "no",
       },
       conditionScore:
-        conditionGrade === "A+"
+        seed.conditionGrade === "A+"
           ? 92
-          : conditionGrade === "A"
+          : seed.conditionGrade === "A"
             ? 84
-            : conditionGrade === "C"
+            : seed.conditionGrade === "C"
               ? 65
-              : conditionGrade === "D"
+              : seed.conditionGrade === "D"
                 ? 50
                 : 75,
-      conditionGrade,
-      riskScore: riskLevel === "High" ? 50 : riskLevel === "Medium" ? 25 : 10,
-      riskLevel,
+      riskScore: seed.riskLevel === "High" ? 50 : seed.riskLevel === "Medium" ? 25 : 10,
       pricing: {
         ...calculatePrice(
           20000,
           1000,
           3000,
-          conditionGrade as any,
-          riskLevel as any,
+          seed.conditionGrade as any,
+          seed.riskLevel as any,
         ),
-        maximumPurchasePrice,
+        maximumPurchasePrice: seed.maximumPurchasePrice,
       },
-      decision,
-      status,
       createdAt: new Date().toISOString(),
-    }),
-  );
+    }));
   saveDevices(devices);
   return devices;
 }

@@ -1,6 +1,33 @@
-# DeviceCheck MVP
+# DeviceCheck — Second-Hand Electronics MVP
 
-A frontend-only internal tool for evaluating second-hand electronic devices. It uses React, TypeScript, Tailwind CSS, React Router, and browser `localStorage`—no backend or external APIs.
+## Scenario and problem
+
+This project addresses the second-hand electronics market scenario. The underlying problem is not just inconsistent inspection: the business lacks a traceable decision trail from intake through purchase, repair, availability, and sale. That makes pricing hard to explain and allows risky devices to enter stock.
+
+The primary users are intake employees and managers; the lightweight repair queue supports technicians after a device is purchased.
+
+## What the MVP does
+
+```text
+New inspection → score, risk, and price → BUY / REVIEW / REJECT
+REVIEW → Inspection History → approve purchase or reject
+BUY → Inventory → Repair required → Under repair → Available → Sold
+```
+
+- Standardized device, physical, functional, battery, repair-history, and identification checks.
+- Deterministic condition score, risk level, price ceiling, expected profit, and margin.
+- Seller quote and actual agreed purchase price are compared with the calculated maximum buy price.
+- A simple inspection-based warranty summary states covered parts, exclusions, and duration; it is guidance only, not warranty-claim management.
+- Inspection History retains every assessed device; active Inventory contains accepted purchases only.
+- Repair Queue lets a technician take and complete a repair; the item then becomes Available.
+- Local serial number and IMEI duplicate checks prevent duplicate active inventory/pending-review records. A rejected historical match requires acknowledgement.
+- Mock demo data and browser `localStorage` persistence; no backend or external API.
+
+## Assumptions and deliberate exclusions
+
+All devices, seller details, prices, and repairs are mock data. The identifier check is a local traceability safeguard, not an ownership, stolen-device, or external IMEI lookup.
+
+To preserve scope, this MVP does not include authentication, technician accounts, real marketplace pricing, cloud photo storage, inventory parts, invoices, warranty claims/returns, notifications, or real repair management.
 
 ## Run locally
 
@@ -9,23 +36,12 @@ npm install
 npm run dev
 ```
 
-## Core workflow
+## Key logic
 
-1. Create a new inspection.
-2. Enter the device and seller details.
-3. Complete the standardized physical, functional, battery, and repair checklist.
-4. Review calculated condition, risk, maximum purchase price, and the BUY / REVIEW / REJECT recommendation.
-5. Save the record to inventory and open its full details page.
+`src/lib/evaluation.ts` contains the condition, risk, pricing, and recommendation rules. Maximum buy price is calculated as:
 
-The app seeds realistic demo devices when its `localStorage` key is empty. Saved inspections persist through page refreshes.
+`adjusted market value − repair cost − risk buffer − desired profit`
 
-## Evaluation logic
+## With five more hours
 
-The scoring and pricing helpers are in `src/lib/evaluation.ts`.
-
-- Condition score: Physical 25%, Functional 35%, Battery 20%, Parts/Repair 20%.
-- Risk: unknown identification/repairs, water damage, failed tests, low battery, and incomplete seller information add deterministic risk points.
-- Decision: High risk → REJECT; Medium risk or condition below 60 → REVIEW; otherwise BUY.
-- Maximum purchase price: `adjusted market value − repair cost − risk buffer − desired profit`.
-
-Condition grade determines the market-value multiplier, while risk level determines the risk buffer (Low 3%, Medium 7%, High 15%).
+I would add lightweight role-oriented workspaces—not full authentication or permission management. An inspector would see intake and their incomplete inspections; a manager would see the pending-review/approval queue; and a technician would see only the Repair Queue.

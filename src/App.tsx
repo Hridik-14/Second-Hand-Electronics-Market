@@ -15,6 +15,7 @@ import {
   Package,
   Plus,
   Search,
+  Wrench,
 } from "lucide-react";
 import {
   calculateConditionScore,
@@ -23,6 +24,8 @@ import {
   getConditionGrade,
   getPurchaseDecision,
   getRiskLevel,
+  getWarrantyDetails,
+  isValidImei,
 } from "./lib/evaluation";
 import { loadDevices, saveDevices } from "./lib/storage";
 
@@ -57,7 +60,7 @@ const initial = {
     battery: "original",
     waterDamage: "no",
   },
-  pricing: { marketPrice: 25000, repairCost: 0, desiredProfit: 3000 },
+  pricing: { marketPrice: "", repairCost: 0, desiredProfit: 3000 },
 };
 const money = (n: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -65,8 +68,9 @@ const money = (n: number) =>
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(n);
+const normalizeIdentifier = (value: string) => value.trim().toUpperCase();
 const badge = (value: string) =>
-  `rounded-full px-2.5 py-1 text-xs font-semibold ${value === "BUY" || value === "Low" || value === "Ready" ? "bg-emerald-100 text-emerald-700" : value === "REJECT" || value === "High" || value === "Rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`;
+  `rounded-full px-2.5 py-1 text-xs font-semibold ${value === "BUY" || value === "Low" || value === "Ready" || value === "Available" || value === "Sold" ? "bg-emerald-100 text-emerald-700" : value === "REJECT" || value === "High" || value === "Rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`;
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -79,7 +83,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           {[
             ["/", "Dashboard", LayoutDashboard],
             ["/inspection/new", "New Inspection", Plus],
+            ["/inspections", "Inspection History", ClipboardCheck],
             ["/inventory", "Inventory", Package],
+            ["/repairs", "Repair Queue", Wrench],
           ].map(([to, label, Icon]: any) => (
             <NavLink
               key={to}
@@ -121,13 +127,13 @@ function Dashboard({ devices }: { devices: any[] }) {
             "text-amber-600",
           ],
           [
-            "Ready for Sale",
-            devices.filter((d) => d.status === "Ready").length,
+            "Available",
+            devices.filter((d) => d.status === "Available" || d.status === "Ready").length,
             "text-emerald-600",
           ],
           [
             "Needs Repair",
-            devices.filter((d) => d.status === "Repair").length,
+            devices.filter((d) => d.status === "Repair required" || d.status === "Repair").length,
             "text-red-600",
           ],
         ].map(([l, n, c]: any) => (
@@ -208,11 +214,13 @@ function DeviceTable({ devices }: { devices: any[] }) {
     </div>
   );
 }
-function Inspection({ onSave }: { onSave: (d: any) => void }) {
+function Inspection({ onSave, devices }: { onSave: (d: any) => void; devices: any[] }) {
   const [step, setStep] = useState(1),
     [d, setD] = useState<any>(initial),
     [errors, setErrors] = useState<string[]>([]),
     [manualDecision, setManualDecision] = useState<any>(null),
+    [rejectedDuplicate, setRejectedDuplicate] = useState<any>(null),
+    [acknowledgedRejectedDuplicate, setAcknowledgedRejectedDuplicate] = useState(false),
     nav = useNavigate();
   const score = calculateConditionScore(d.inspection),
     grade = getConditionGrade(score),
@@ -250,7 +258,28 @@ function Inspection({ onSave }: { onSave: (d: any) => void }) {
       !d.serialNumber && "Serial number",
       !d.seller.name && "Seller name",
       d.type !== "laptop" && !d.imei && "IMEI",
+      d.type !== "laptop" && d.imei && !isValidImei(d.imei) && "a valid 15-digit IMEI",
     ].filter(Boolean) as string[];
+    const existing = devices.find((device) => {
+      const serialMatches = d.serialNumber && normalizeIdentifier(device.serialNumber ?? "") === normalizeIdentifier(d.serialNumber);
+      const imeiMatches = d.imei && normalizeIdentifier(device.imei ?? "") === normalizeIdentifier(d.imei);
+      return serialMatches || imeiMatches;
+    });
+    if (existing) {
+      if (existing.decision === "BUY") {
+        setErrors([...e, `This device already exists in active inventory (${existing.id}).`]);
+        return;
+      }
+      if (existing.decision === "REVIEW") {
+        setErrors([...e, `This device already has a pending review (${existing.id}).`]);
+        return;
+      }
+      if (!acknowledgedRejectedDuplicate) {
+        setRejectedDuplicate(existing);
+        setErrors([...e, `This identifier appeared in rejected inspection ${existing.id}. Acknowledge it before continuing.`]);
+        return;
+      }
+    }
     setErrors(e);
     if (!e.length) setStep((s) => s + 1);
   };
@@ -263,18 +292,21 @@ function Inspection({ onSave }: { onSave: (d: any) => void }) {
       riskScore,
       riskLevel: risk,
       pricing,
+      warranty: getWarrantyDetails(d.inspection),
       systemDecision,
       decision: finalDecision,
       status:
         finalDecision === "BUY"
-          ? "Ready"
+          ? Object.values(d.inspection.functional).some((result) => result === "fail") || d.inspection.waterDamage === "yes"
+            ? "Repair required"
+            : "Available"
           : finalDecision === "REVIEW"
-            ? "Review"
+            ? "Pending Review"
             : "Rejected",
       createdAt: new Date().toISOString(),
     };
     onSave(record);
-    nav("/inventory");
+    nav(finalDecision === "BUY" ? "/inventory" : "/inspections");
   };
   return (
     <Page
@@ -297,7 +329,7 @@ function Inspection({ onSave }: { onSave: (d: any) => void }) {
           </div>
         ))}
       </div>
-      {step === 1 && <DeviceForm d={d} set={set} errors={errors} />}{" "}
+      {step === 1 && <DeviceForm d={d} set={set} errors={errors} rejectedDuplicate={rejectedDuplicate} onAcknowledgeRejectedDuplicate={() => { setAcknowledgedRejectedDuplicate(true); setErrors([]); }} />}{" "}
       {step === 2 && (
         <InspectionForm
           d={d}
@@ -348,7 +380,7 @@ function Inspection({ onSave }: { onSave: (d: any) => void }) {
     </Page>
   );
 }
-function DeviceForm({ d, set, errors }: any) {
+function DeviceForm({ d, set, errors, rejectedDuplicate, onAcknowledgeRejectedDuplicate }: any) {
   const field = (label: string, path: string, type = "text") => (
     <label className="block text-sm font-medium">
       {label}
@@ -367,8 +399,14 @@ function DeviceForm({ d, set, errors }: any) {
       <h2 className="mb-5 font-semibold">Device information</h2>
       {errors.length > 0 && (
         <p className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">
-          Please complete: {errors.join(", ")}
+          Please correct: {errors.join(", ")}
         </p>
+      )}
+      {rejectedDuplicate && (
+        <div className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <p>This IMEI or serial number belongs to rejected inspection <Link className="font-semibold underline" to={`/device/${rejectedDuplicate.id}`}>{rejectedDuplicate.id}</Link>. Confirm that this is a legitimate re-submission before continuing.</p>
+          <button type="button" className="btn-secondary mt-3" onClick={onAcknowledgeRejectedDuplicate}>Acknowledge and continue</button>
+        </div>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm font-medium">
@@ -388,7 +426,24 @@ function DeviceForm({ d, set, errors }: any) {
         {field("Storage", "storage")}
         {field("Color", "color")}
         {field("Serial number", "serialNumber")}
-        {d.type !== "laptop" && field("IMEI", "imei")}
+        {d.type !== "laptop" && (
+          <label className="block text-sm font-medium">
+            IMEI
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={15}
+              value={d.imei}
+              onChange={(e) => set("imei", e.target.value.replace(/\D/g, ""))}
+              className="input mt-1"
+              aria-invalid={d.imei.length > 0 && !isValidImei(d.imei)}
+              aria-describedby="imei-help"
+            />
+            <span id="imei-help" className="mt-1 block text-xs font-normal text-slate-500">
+              Enter the 15-digit IMEI from the device settings or label.
+            </span>
+          </label>
+        )}
         <label className="block text-sm font-medium">
           Identification check
           <select
@@ -557,7 +612,8 @@ function DecisionForm({
     margin = pricing.adjustedMarketValue
       ? Math.round((expectedProfit / pricing.adjustedMarketValue) * 100)
       : 0,
-    withinQuote = d.seller.askingPrice <= pricing.maximumPurchasePrice;
+    withinQuote = d.seller.askingPrice <= pricing.maximumPurchasePrice,
+    warranty = getWarrantyDetails(d.inspection);
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <div className="card">
@@ -647,6 +703,12 @@ function DecisionForm({
             </b>
           </div>
         </div>
+        <div className="mt-4 rounded bg-slate-800 p-3 text-sm">
+          <p className="text-xs font-medium text-slate-300">WARRANTY SUMMARY</p>
+          <p className="mt-1 font-semibold">{warranty.durationDays} days</p>
+          <p className="mt-1 text-xs text-slate-300">{warranty.coverage.length ? `Covered: ${warranty.coverage.join(", ")}` : "No warranty coverage"}</p>
+          {warranty.exclusions.length > 0 && <p className="mt-1 text-xs text-slate-300">Excluded: {warranty.exclusions.join(", ")}</p>}
+        </div>
         <p className="mt-6 text-xs font-medium text-slate-300">
           SYSTEM RECOMMENDATION
         </p>
@@ -673,7 +735,7 @@ function DecisionForm({
     </div>
   );
 }
-function Inventory({ devices }: { devices: any[] }) {
+function InspectionHistory({ devices }: { devices: any[] }) {
   const [q, setQ] = useState(""),
     [filter, setFilter] = useState("All");
   const matches = devices.filter(
@@ -685,12 +747,12 @@ function Inventory({ devices }: { devices: any[] }) {
         .includes(q.toLowerCase()),
   );
   return (
-    <Page title="Inventory" subtitle="Search and review evaluated devices">
+    <Page title="Inspection History" subtitle="All incoming-device assessments, including reviews and rejections">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
+        <div className="relative flex-1 gap-2">
           <Search className="absolute left-3 top-3 text-slate-400" size={18} />
           <input
-            className="input pl-10"
+            className="input !pl-10"
             placeholder="Search brand, model, serial number or IMEI"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -714,7 +776,16 @@ function Inventory({ devices }: { devices: any[] }) {
     </Page>
   );
 }
-function Detail({ devices }: { devices: any[] }) {
+function Inventory({ devices }: { devices: any[] }) {
+  const [q, setQ] = useState("");
+  const matches = devices.filter((d) => d.decision === "BUY" && [d.brand, d.model, d.serialNumber, d.imei].join(" ").toLowerCase().includes(q.toLowerCase()));
+  return <Page title="Inventory" subtitle="Devices owned by the business, including available, repair, and sold stock"><div className="mb-5 relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input className="input !pl-10" placeholder="Search owned devices" value={q} onChange={(e)=>setQ(e.target.value)}/></div><div className="card overflow-hidden p-0"><DeviceTable devices={matches}/></div></Page>
+}
+function RepairQueue({ devices, onUpdate }: { devices: any[]; onUpdate: (id: string, changes: any) => void }) {
+  const repairs = devices.filter((d) => d.decision === "BUY" && ["Repair required", "Under repair"].includes(d.status));
+  return <Page title="Repair Queue" subtitle="Business-owned devices that require technician work"><div className="card overflow-hidden p-0"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-5 py-3">Device</th><th className="px-5 py-3">Detected faults</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Action</th></tr></thead><tbody>{repairs.map((d)=><tr className="border-t" key={d.id}><td className="px-5 py-4"><Link className="font-medium text-blue-700" to={`/device/${d.id}`}>{d.brand} {d.model}</Link></td><td className="px-5 py-4">{Object.entries(d.inspection.functional).filter(([, result])=>result === "fail").map(([test])=>test).join(", ") || "Water / cosmetic repair"}</td><td className="px-5 py-4"><span className={badge(d.status)}>{d.status}</span></td><td className="px-5 py-4"><button className="btn" onClick={()=>onUpdate(d.id,{status:d.status === "Repair required" ? "Under repair" : "Available",repair:{status:d.status === "Repair required" ? "assigned" : "completed",updatedAt:new Date().toISOString()}})}>{d.status === "Repair required" ? "Take repair" : "Complete repair"}</button></td></tr>)}</tbody></table>{repairs.length===0&&<p className="p-6 text-sm text-slate-500">No devices are waiting for repair.</p>}</div></Page>
+}
+function Detail({ devices, onUpdate }: { devices: any[]; onUpdate: (id: string, changes: any) => void }) {
   const { id } = useParams(),
     d = devices.find((x) => x.id === id);
   if (!d)
@@ -728,6 +799,7 @@ function Detail({ devices }: { devices: any[] }) {
   const actualPurchasePrice = d.actualPurchasePrice ?? d.seller.askingPrice;
   const expectedProfit = d.pricing.adjustedMarketValue - actualPurchasePrice - d.pricing.repairCost;
   const profitMargin = d.pricing.adjustedMarketValue ? Math.round((expectedProfit / d.pricing.adjustedMarketValue) * 100) : 0;
+  const warranty = d.warranty ?? getWarrantyDetails(d.inspection);
   return (
     <Page
       title={`${d.brand} ${d.model}`}
@@ -800,6 +872,19 @@ function Detail({ devices }: { devices: any[] }) {
             System recommendation: {d.systemDecision ?? d.decision}
           </p>
           <p className="mt-3 text-sm text-slate-500">Status: {d.status}</p>
+          {d.decision === "REVIEW" && (
+            <div className="mt-4 flex gap-2">
+              <button className="btn" onClick={() => onUpdate(d.id, { decision: "BUY", status: "Available" })}>Approve purchase</button>
+              <button className="btn-secondary" onClick={() => onUpdate(d.id, { decision: "REJECT", status: "Rejected" })}>Reject</button>
+            </div>
+          )}
+          {d.decision === "BUY" && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {d.status !== "Sold" && <button className="btn-secondary" onClick={() => onUpdate(d.id, { status: "Sold" })}>Mark sold</button>}
+              {d.status === "Sold" && <button className="btn-secondary" onClick={() => onUpdate(d.id, { status: "Available" })}>Mark available</button>}
+              {d.status === "Available" && <button className="btn-secondary" onClick={() => onUpdate(d.id, { status: "Repair required" })}>Send to repair</button>}
+            </div>
+          )}
         </section>
         <section className="card lg:col-span-2">
           <h2 className="font-semibold">Pricing</h2>
@@ -823,6 +908,12 @@ function Detail({ devices }: { devices: any[] }) {
               </p>
             ))}
           </div>
+        </section>
+        <section className="card">
+          <h2 className="font-semibold">Warranty summary</h2>
+          <p className="mt-3 text-2xl font-bold">{warranty.durationDays} days</p>
+          {warranty.coverage.length > 0 && <><p className="mt-3 text-xs font-medium text-slate-500">COVERED</p><ul className="mt-1 list-disc space-y-1 pl-4 text-sm">{warranty.coverage.map((item: string) => <li key={item}>{item}</li>)}</ul></>}
+          {warranty.exclusions.length > 0 && <><p className="mt-3 text-xs font-medium text-slate-500">EXCLUDED</p><ul className="mt-1 list-disc space-y-1 pl-4 text-sm">{warranty.exclusions.map((item: string) => <li key={item}>{item}</li>)}</ul></>}
         </section>
         <section className="card">
           <h2 className="font-semibold">Timeline</h2>
@@ -871,14 +962,22 @@ function App() {
       saveDevices(next);
       return next;
     });
+  const update = (id: string, changes: any) =>
+    setDevices((old) => {
+      const next = old.map((device) => device.id === id ? { ...device, ...changes } : device);
+      saveDevices(next);
+      return next;
+    });
   return (
     <BrowserRouter>
       <Shell>
         <Routes>
           <Route path="/" element={<Dashboard devices={devices} />} />
-          <Route path="/inspection/new" element={<Inspection onSave={add} />} />
+          <Route path="/inspection/new" element={<Inspection onSave={add} devices={devices} />} />
+          <Route path="/inspections" element={<InspectionHistory devices={devices} />} />
           <Route path="/inventory" element={<Inventory devices={devices} />} />
-          <Route path="/device/:id" element={<Detail devices={devices} />} />
+          <Route path="/repairs" element={<RepairQueue devices={devices} onUpdate={update} />} />
+          <Route path="/device/:id" element={<Detail devices={devices} onUpdate={update} />} />
         </Routes>
       </Shell>
     </BrowserRouter>
