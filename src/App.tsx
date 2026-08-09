@@ -76,7 +76,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <aside className="fixed inset-y-0 hidden w-60 border-r border-slate-200 bg-white p-5 md:block">
         <div className="mb-10 flex items-center gap-2 font-bold">
-          <ClipboardCheck className="text-blue-600" /> DeviceCheck
+          <ClipboardCheck className="text-blue-600" /> DeviceInspector
         </div>
         <nav className="space-y-1">
           {[

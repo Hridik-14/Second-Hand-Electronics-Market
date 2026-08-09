@@ -1,4 +1,4 @@
-# DeviceCheck — Second-Hand Electronics MVP
+# DeviceInspector — Second-Hand Electronics MVP
 
 ## Scenario and problem
 
