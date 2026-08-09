@@ -2,6 +2,22 @@ export type Grade = "A+" | "A" | "B" | "C" | "D";
 export type RiskLevel = "Low" | "Medium" | "High";
 export type Decision = "BUY" | "REVIEW" | "REJECT";
 
+/** Validates the 15-digit IMEI format and its Luhn check digit locally. */
+export function isValidImei(value: string): boolean {
+  if (!/^\d{15}$/.test(value)) return false;
+
+  const checksum = value
+    .split("")
+    .slice(0, -1)
+    .reduce((sum, digit, index) => {
+      let number = Number(digit);
+      if (index % 2 === 1) number *= 2;
+      return sum + (number > 9 ? number - 9 : number);
+    }, 0);
+
+  return (checksum + Number(value.at(-1))) % 10 === 0;
+}
+
 export const physicalScores: Record<string, number> = {
   excellent: 100,
   minor: 85,
@@ -117,4 +133,32 @@ export function calculatePrice(
       adjustedMarketValue - repairCost - riskBuffer - desiredProfit,
     ),
   };
+}
+
+export function getWarrantyDetails(inspection: any) {
+  const failedTests = Object.entries(inspection.functional)
+    .filter(([, result]) => result === "fail")
+    .map(([test]) => test);
+  const exclusions = [...failedTests];
+
+  if (inspection.waterDamage === "yes") {
+    return {
+      durationDays: 0,
+      coverage: [],
+      exclusions: [...exclusions, "Water damage and water-related faults"],
+    };
+  }
+
+  const coverage = ["Core functional tests that passed inspection"];
+  if (inspection.screen === "original") coverage.push("Original screen");
+  else if (inspection.screen === "replaced") coverage.push("Replacement screen (15 days)");
+  else exclusions.push("Screen condition is unknown");
+
+  if (inspection.battery === "original" && inspection.batteryHealth >= 80)
+    coverage.push("Original battery");
+  else if (inspection.battery === "replaced")
+    coverage.push("Replacement battery (15 days)");
+  else exclusions.push("Battery performance");
+
+  return { durationDays: 30, coverage, exclusions };
 }
